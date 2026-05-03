@@ -1,7 +1,7 @@
 import { useNavigate, useOutletContext, useParams} from "react-router";
 import {useEffect, useRef, useState} from "react";
 import {generate3DView} from "../../lib/ai.action";
-import {Box, Download, RefreshCcw, Share2, X} from "lucide-react";
+import {Box, Check, Download, RefreshCcw, Share2, X} from "lucide-react";
 import Button from "../../components/ui/Button";
 import {createProject, getProjectById} from "../../lib/puter.action";
 import {ReactCompareSlider, ReactCompareSliderImage} from "react-compare-slider";
@@ -18,17 +18,76 @@ const VisualizerId = () => {
 
     const [isProcessing, setIsProcessing] = useState(false);
     const [currentImage, setCurrentImage] = useState<string | null>(null);
+    const [isCopied, setIsCopied] = useState(false);
 
     const handleBack = () => navigate('/');
-    const handleExport = () => {
+    const handleExport = async () => {
         if (!currentImage) return;
 
-        const link = document.createElement('a');
-        link.href = currentImage;
-        link.download = `roomify-${id || 'design'}.png`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        try {
+            const response = await fetch(currentImage);
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `roomify-${id || 'design'}.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Failed to download image:', error);
+            const link = document.createElement('a');
+            link.href = currentImage;
+            link.download = `roomify-${id || 'design'}.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    }
+
+    const handleShare = async () => {
+        const shareData: ShareData = {
+            title: 'Roomify Design',
+            text: 'Check out my AI-generated room design!',
+            url: window.location.href,
+        };
+
+        try {
+            if (currentImage) {
+                try {
+                    const response = await fetch(currentImage);
+                    const blob = await response.blob();
+                    const file = new File([blob], `roomify-${id || 'design'}.png`, { type: blob.type });
+                    
+                    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                        shareData.files = [file];
+                    }
+                } catch (e) {
+                    console.warn('Could not fetch image for native share:', e);
+                }
+            }
+
+            if (navigator.share) {
+                await navigator.share(shareData);
+            } else {
+                await navigator.clipboard.writeText(window.location.href);
+                setIsCopied(true);
+                setTimeout(() => setIsCopied(false), 2000);
+            }
+        } catch (error) {
+            console.error('Failed to share:', error);
+            if ((error as Error).name !== 'AbortError') {
+                try {
+                    await navigator.clipboard.writeText(window.location.href);
+                    setIsCopied(true);
+                    setTimeout(() => setIsCopied(false), 2000);
+                } catch (err) {
+                    console.error('Failed to fallback to clipboard:', err);
+                }
+            }
+        }
     }
 
     const runGeneration = async (item: DesignItem) => {
@@ -141,9 +200,18 @@ const VisualizerId = () => {
                             >
                                 <Download className="w-4 h-4 mr-2" /> Export
                             </Button>
-                            <Button size="sm" onClick={() => {}} className="share">
-                                <Share2 className="w-4 h-4 mr-2" />
-                                Share
+                            <Button size="sm" onClick={handleShare} className="share">
+                                {isCopied ? (
+                                    <>
+                                        <Check className="w-4 h-4 mr-2" />
+                                        Copied!
+                                    </>
+                                ) : (
+                                    <>
+                                        <Share2 className="w-4 h-4 mr-2" />
+                                        Share
+                                    </>
+                                )}
                             </Button>
                         </div>
                     </div>
